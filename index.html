@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Climate in Color | Global Temperature Heat Map</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script defer src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+  <style>
+    :root {
+      --background: #091421;
+      --panel: #132438;
+      --panel-light: #192d42;
+      --border: #2b4157;
+      --text: #f2f6fc;
+      --muted: #a8b9ca;
+      --accent: #93e2da;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 48px 24px;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text);
+      background: radial-gradient(ellipse at 75% -20%, #20425a 0%, transparent 55%), var(--background);
+    }
+
+    main { max-width: 1530px; margin: 0 auto; }
+
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: .2em;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    header { margin-bottom: 28px; }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      letter-spacing: -.055em;
+      margin: 12px 0 8px;
+      line-height: 1.13;
+    }
+
+    #description {
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 740px;
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .overview {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 17px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      background: rgba(19, 36, 56, .8);
+      border-radius: 14px;
+      padding: 17px 21px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .metric-number {
+      font-size: 25px;
+      letter-spacing: -.04em;
+      font-weight: 780;
+      margin-top: 5px;
+    }
+
+    .panel {
+      background: linear-gradient(145deg, var(--panel-light), var(--panel));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 26px 25px 20px;
+      box-shadow: 0 25px 65px rgba(0, 0, 0, .2);
+    }
+
+    .panel-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 0 12px 10px;
+    }
+
+    .panel-top strong { font-size: 16px; }
+    .panel-top span, .hint { color: var(--muted); font-size: 12px; }
+
+    .scroll { overflow-x: auto; padding-bottom: 5px; }
+    .chart-stage { position: relative; min-width: 1080px; }
+    #heat-map { display: block; width: 100%; height: auto; }
+
+    .axis path, .axis line { stroke: #8298ab; stroke-opacity: .65; }
+    .axis .tick text { fill: #c3d0dd; font-size: 12px; }
+    .axis-label { fill: var(--muted); font-size: 12px; }
+
+    .cell { cursor: crosshair; shape-rendering: crispEdges; }
+    .cell:hover, .cell:focus { stroke: #fff; stroke-width: 1.8px; outline: none; }
+
+    #tooltip {
+      display: none;
+      position: absolute;
+      z-index: 5;
+      pointer-events: none;
+      width: max-content;
+      max-width: 220px;
+      padding: 12px 15px;
+      border-radius: 11px;
+      color: #f3f8fd;
+      background: #07111e;
+      border: 1px solid #527188;
+      box-shadow: 0 12px 30px rgba(0,0,0,.4);
+      line-height: 1.6;
+      font-size: 12px;
+    }
+
+    .tooltip-title { font-size: 14px; font-weight: 800; }
+    .tooltip-temp { font-size: 20px; font-weight: 800; color: #9de6db; }
+    .tooltip-note { color: #a8bacb; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 30px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 15px 12px 0;
+    }
+
+    .legend-title { font-size: 12px; font-weight: 700; }
+    #legend { width: min(600px, 100%); height: auto; overflow: visible; }
+    .legend-label { font-size: 11px; fill: #c2d0df; }
+
+    footer {
+      margin: 18px 9px 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      color: #9fb1c4;
+      font-size: 12px;
+    }
+    footer a { color: var(--accent); }
+    .error { padding: 35px; color: #ffc0c0; }
+
+    @media (max-width: 720px) {
+      body { padding: 24px 11px; }
+      .overview { gap: 6px; }
+      .metric { padding: 12px 10px; }
+      .metric-number { font-size: 18px; }
+      .metric-label { font-size: 9px; }
+      .panel { padding: 15px 8px 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Climate Atlas / Historical Record</div>
+      <h1 id="title">Climate in Color</h1>
+      <p id="description">
+        Monthly global land-surface temperature, 1753–2015. Each colored cell represents one
+        month; cooler temperatures appear in blues and warmer temperatures in oranges and reds.
+      </p>
+    </header>
+
+    <div class="overview" aria-label="Dataset overview">
+      <div class="metric">
+        <div class="metric-label">Historical period</div>
+        <div class="metric-number" id="period">1753–2015</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Baseline temperature</div>
+        <div class="metric-number" id="baseline">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Monthly records</div>
+        <div class="metric-number" id="record-count">—</div>
+      </div>
+    </div>
+
+    <section class="panel" aria-label="Global temperature heat map">
+      <div class="panel-top">
+        <strong>Two and a half centuries of temperatures</strong>
+        <span>Hover over a cell for temperature details</span>
+      </div>
+
+      <div class="scroll">
+        <div class="chart-stage">
+          <svg id="heat-map" aria-label="Global monthly temperature heat map" role="img"></svg>
+          <div id="tooltip" role="status" data-year=""></div>
+        </div>
+      </div>
+
+      <div class="legend-row">
+        <div>
+          <div class="legend-title">Temperature scale (°C)</div>
+          <div class="hint">Cooler → Warmer</div>
+        </div>
+        <svg id="legend" aria-label="Temperature colors legend"></svg>
+      </div>
+
+      <footer>
+        <span>Each column = one year · Each row = one month</span>
+        <span>Data: <a href="https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json" target="_blank" rel="noopener noreferrer">freeCodeCamp Global Temperature Dataset</a></span>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const dataURL = 'https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json';
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const palette = [
+      '#21466d', '#2d6ea0', '#419ac1', '#6cbac8', '#a5d4c9',
+      '#f3e1ad', '#f8bd7d', '#f08f59', '#df6349', '#b93d4c'
+    ];
+
+    const width = 1430;
+    const height = 620;
+    const margin = { top: 40, right: 32, bottom: 75, left: 105 };
+    const svg = d3.select('#heat-map').attr('viewBox', `0 0 ${width} ${height}`);
+    const tooltip = d3.select('#tooltip');
+
+    d3.json(dataURL).then(result => {
+      const data = result.monthlyVariance;
+      const baseTemperature = result.baseTemperature;
+      const years = d3.range(
+        d3.min(data, d => d.year), d3.max(data, d => d.year) + 1
+      );
+
+      data.forEach(d => { d.temperature = baseTemperature + d.variance; });
+
+      document.getElementById('period').textContent =
+        years[0] + '–' + years[years.length - 1];
+      document.getElementById('baseline').textContent =
+        baseTemperature.toFixed(2) + '°C';
+      document.getElementById('record-count').textContent =
+        data.length.toLocaleString('en-US');
+
+      // Band scales center tick labels on their corresponding cells.
+      const xScale = d3.scaleBand()
+        .domain(years)
+        .range([margin.left, width - margin.right]);
+
+      const yScale = d3.scaleBand()
+        .domain(d3.range(12))
+        .range([margin.top, height - margin.bottom]);
+
+      const tempExtent = d3.extent(data, d => d.temperature);
+      const colorScale = d3.scaleQuantize()
+        .domain(tempExtent)
+        .range(palette);
+
+      // D3 generates the tick groups on both axes.
+      const yearTicks = d3.range(1775, 2001, 25);
+
+      svg.append('g')
+        .attr('id', 'x-axis')
+        .attr('class', 'axis')
+        .attr('transform', `translate(0, ${height - margin.bottom})`)
+        .call(d3.axisBottom(xScale).tickValues(yearTicks).tickSizeOuter(0));
+
+      svg.append('g')
+        .attr('id', 'y-axis')
+        .attr('class', 'axis')
+        .attr('transform', `translate(${margin.left}, 0)`)
+        .call(d3.axisLeft(yScale).tickFormat(d => months[d]).tickSizeOuter(0));
+
+      svg.append('text')
+        .attr('class', 'axis-label')
+        .attr('x', (margin.left + width - margin.right) / 2)
+        .attr('y', height - 22)
+        .attr('text-anchor', 'middle')
+        .text('Year');
+
+      function moveTooltip(event) {
+        const stage = document.querySelector('.chart-stage');
+        const [px, py] = d3.pointer(event, stage);
+        const x = Math.max(105, Math.min(px, stage.clientWidth - 105));
+        const below = py < 145;
+        tooltip.style('left', x + 'px')
+          .style('top', (below ? py + 16 : py - 16) + 'px')
+          .style('transform', below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)');
+      }
+
+      function showTooltip(event, d) {
+        const temp = d.temperature;
+        const variance = d.variance;
+        tooltip.attr('data-year', d.year)
+          .html(
+            `<div class="tooltip-title">${months[d.month - 1]} ${d.year}</div>` +
+            `<div class="tooltip-temp">${temp.toFixed(2)}°C</div>` +
+            `<div class="tooltip-note">Variance: ${variance >= 0 ? '+' : ''}${variance.toFixed(2)}°C</div>`
+          )
+          .style('display', 'block');
+        moveTooltip(event);
+      }
+
+      function hideTooltip() { tooltip.style('display', 'none'); }
+
+      svg.selectAll('rect.cell')
+        .data(data)
+        .enter()
+        .append('rect')
+        .attr('class', 'cell')
+        .attr('data-month', d => d.month - 1) // freeCodeCamp expects 0–11
+        .attr('data-year', d => d.year)
+        .attr('data-temp', d => d.temperature)
+        .attr('x', d => xScale(d.year))
+        .attr('y', d => yScale(d.month - 1))
+        .attr('width', xScale.bandwidth())
+        .attr('height', yScale.bandwidth())
+        .attr('fill', d => colorScale(d.temperature))
+        .on('mouseover', showTooltip)
+        .on('mousemove', moveTooltip)
+        .on('mouseout', hideTooltip);
+
+      // A separate SVG legend; legend rectangles are NOT .cell elements.
+      const legend = d3.select('#legend')
+        .attr('viewBox', '0 0 600 80');
+      const legendX = 17;
+      const legendY = 11;
+      const swatchWidth = 56;
+
+      legend.selectAll('rect.legend-swatch')
+        .data(palette)
+        .enter()
+        .append('rect')
+        .attr('class', 'legend-swatch')
+        .attr('x', (d, i) => legendX + i * swatchWidth)
+        .attr('y', legendY)
+        .attr('width', swatchWidth)
+        .attr('height', 21)
+        .attr('fill', d => d);
+
+      const legendAxis = d3.scaleLinear()
+        .domain(tempExtent)
+        .range([legendX, legendX + palette.length * swatchWidth]);
+
+      legend.append('g')
+        .attr('class', 'axis')
+        .attr('transform', 'translate(0, 32)')
+        .call(d3.axisBottom(legendAxis).ticks(6).tickFormat(d3.format('.1f')).tickSize(5));
+
+    }).catch(error => {
+      console.error('Unable to load temperature data:', error);
+      d3.select('.chart-stage').append('p')
+        .attr('class', 'error')
+        .text('Unable to load temperature data. Check your connection and refresh.');
+    });
+  </script>
+</body>
+</html>
